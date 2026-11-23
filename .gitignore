@@ -1,0 +1,15 @@
+# privado o pesado: queda solo local
+notas.md
+CLAUDE.md
+app-altura-del-rio.webp
+aysa-estaciones-meteorologicas*.csv
+codigo.gs
+datos.db
+data/
+web/
+.venv/
+__pycache__/
+*.log
+results/*
+!results/*.csv
+!results/test_vector.json

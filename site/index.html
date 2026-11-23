@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Elegís una fecha y te dice si la lancha Ramal 3 entra al arroyo Caraguatá (Delta del Paraná): marea, viento, Paraná y un modelo propio.">
+<title>¿Pasa la lancha?</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2215%22 fill=%22%235f97a6%22/%3E%3Cpath d=%22M5 19q5.5-4 11 0t11 0%22 stroke=%22white%22 stroke-width=%222.5%22 fill=%22none%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de río. Arriba el veredicto del día, al medio el mapa del Caraguatá con la luna y el viento al costado,
+   abajo la curva del día y los viajes. Todo en un solo tono de agua pastel: más profundo = más agua. */
+:root {
+  --bg: #edf4f5;
+  --paper: #f7fbfb;
+  --t1: #dcebee;
+  --t2: #bfd9df;
+  --t3: #93bfca;
+  --t4: #5f97a6;
+  --ink: #284f5a;
+  --ink2: #5c8792;
+  --line: #cfe2e6;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "Instrument Sans", "Helvetica Neue", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #142328; --paper: #1a2c32; --t1: #213940; --t2: #2b4b54; --t3: #3f6e7a; --t4: #79aebb;
+    --ink: #d8ecf0; --ink2: #98bfc8; --line: #284249; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #142328; --paper: #1a2c32; --t1: #213940; --t2: #2b4b54; --t3: #3f6e7a; --t4: #79aebb;
+  --ink: #d8ecf0; --ink2: #98bfc8; --line: #284249; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--display); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); font-weight: 600; }
+
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; }
+header h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; line-height: 1; }
+header p { margin: 6px 0 0; color: var(--ink2); max-width: 46ch; }
+.fecha { display: flex; align-items: center; gap: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 5px; }
+.fecha button, .fecha input {
+  font: 500 15px var(--body); color: var(--ink); background: transparent; border: 0; border-radius: 999px; padding: 7px 12px; cursor: pointer;
+}
+.fecha button:hover { background: var(--t1); }
+.fecha input { cursor: text; min-width: 0; }
+button:focus-visible, input:focus-visible, .viaje:focus-visible { outline: 2px solid var(--t4); outline-offset: 2px; }
+
+.veredicto { background: var(--t2); border-radius: 22px; padding: 22px 24px; display: grid; grid-template-columns: 1fr auto; gap: 14px 24px; align-items: center; }
+.veredicto[data-nivel="0"] { background: var(--t3); }
+.veredicto[data-nivel="1"] { background: var(--t2); }
+.veredicto[data-nivel="2"] { background: var(--t1); }
+.veredicto[data-nivel="3"] { background: var(--paper); border: 1.5px dashed var(--t4); }
+.veredicto .grande { font-family: var(--display); font-size: clamp(40px, 8vw, 72px); font-weight: 800; line-height: 0.95; }
+.veredicto p { margin: 8px 0 0; max-width: 60ch; }
+.fuente { justify-self: end; text-align: right; font-size: 13px; color: var(--ink2); max-width: 26ch; }
+.fuente b { display: block; color: var(--ink); font-size: 14px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 22px; }
+.panel { background: var(--paper); border-radius: 18px; padding: 18px; min-width: 0; }
+.panel h2 { font-size: 19px; font-weight: 600; }
+.lado { display: grid; gap: 22px; align-content: start; }
+.mapa svg { width: 100%; height: auto; display: block; }
+.mapa .pie { font-size: 12.5px; color: var(--ink2); margin-top: 6px; }
+
+.astro { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; }
+.astro svg { width: 76px; height: 76px; }
+.dato { font-family: var(--display); font-size: 24px; font-weight: 600; line-height: 1.1; }
+.sub { color: var(--ink2); font-size: 13.5px; }
+.rios { display: grid; gap: 10px; margin-top: 10px; }
+.rio { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+.barra { grid-column: 1 / -1; height: 6px; background: var(--t1); border-radius: 6px; overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--t4); border-radius: 6px; }
+
+.curva svg { width: 100%; height: auto; display: block; }
+.curva .leyenda { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink2); margin-top: 8px; }
+.curva .leyenda span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--t4); vertical-align: middle; margin-right: 6px; }
+.curva .leyenda .ast::before { border-top: 2px dashed var(--t3); }
+.curva .leyenda .umb::before { border-top: 1.5px dotted var(--ink); }
+.curva .leyenda .banda::before { height: 9px; border: 0; background: var(--t1); }
+
+.viajes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.viaje { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; cursor: pointer; background: var(--paper); text-align: left; font: inherit; color: inherit; display: grid; gap: 3px; }
+.viaje[aria-pressed="true"] { border-color: var(--t4); box-shadow: inset 0 0 0 1px var(--t4); }
+.viaje .hora { font-family: var(--display); font-weight: 600; font-size: 20px; }
+.viaje .que { font-size: 12.5px; color: var(--ink2); }
+.viaje .agua { height: 26px; border-radius: 7px; background: var(--t1); position: relative; overflow: hidden; margin-top: 4px; }
+.viaje .agua i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--t3); }
+.viaje .pct { font-family: var(--mono); font-size: 12.5px; }
+.grupo h3 { font-size: 14px; font-weight: 600; margin-top: 14px; color: var(--ink2); font-family: var(--body); letter-spacing: 0.04em; text-transform: uppercase; }
+
+.notas { font-size: 13px; color: var(--ink2); display: grid; gap: 6px; max-width: 80ch; }
+.notas p { margin: 0; }
+@media (max-width: 760px) {
+  .grid { grid-template-columns: 1fr; }
+  .veredicto { grid-template-columns: 1fr; }
+  .fuente { justify-self: start; text-align: left; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ola { animation: ola 6s ease-in-out infinite alternate; }
+  @keyframes ola { from { transform: translateX(-6px); } to { transform: translateX(6px); } }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Ramal 3 · Tigre → Paraná de las Palmas</div>
+      <h1>¿Pasa la lancha por el Caraguatá?</h1>
+      <p>Elegí un día. Te digo si hay agua suficiente en el arroyo para cada lancha, y por qué.</p>
+    </div>
+    <div class="fecha" role="group" aria-label="Fecha">
+      <button id="menos" aria-label="Día anterior">←</button>
+      <input id="dia" type="date" aria-label="Día del viaje">
+      <button id="mas" aria-label="Día siguiente">→</button>
+    </div>
+  </header>
+
+  <section class="veredicto" id="veredicto" data-nivel="1">
+    <div>
+      <div class="eyebrow" id="v-dia">—</div>
+      <div class="grande" id="v-grande">Cargando…</div>
+      <p id="v-texto"></p>
+    </div>
+    <div class="fuente" id="v-fuente"></div>
+  </section>
+
+  <div class="grid">
+    <section class="panel mapa">
+      <div class="eyebrow" id="m-titulo">El arroyo a la hora del viaje</div>
+      <svg id="mapa" viewBox="0 0 640 440" role="img" aria-label="Esquema del arroyo Caraguatá y sus ríos"></svg>
+      <div class="pie">Esquema, no a escala. El color del agua sigue el nivel en San Fernando: más oscuro, más agua.</div>
+    </section>
+    <div class="lado">
+      <section class="panel">
+        <div class="eyebrow">Luna</div>
+        <div class="astro">
+          <svg id="luna" viewBox="-40 -40 80 80" aria-hidden="true"></svg>
+          <div><div class="dato" id="luna-nombre">—</div><div class="sub" id="luna-sub"></div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="eyebrow">Viento en el Río de la Plata</div>
+        <div class="astro">
+          <svg id="rosa" viewBox="-40 -40 80 80" aria-hidden="true"></svg>
+          <div><div class="dato" id="viento-dato">—</div><div class="sub" id="viento-sub"></div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="eyebrow">Lo que baja de arriba</div>
+        <div class="rios" id="rios"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel curva">
+    <div class="eyebrow">El nivel durante el día · San Fernando, metros</div>
+    <svg id="curva" viewBox="0 0 900 260" role="img" aria-label="Nivel del río durante el día"></svg>
+    <div class="leyenda" id="leyenda"></div>
+    <div id="viajes"></div>
+  </section>
+
+  <section class="notas" id="notas"></section>
+</div>
+
+<script src="modelo.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const H2000 = 262968; // horas desde 1970 hasta 2000-01-01 UTC
+const ART = 3; // Argentina = UTC-3, sin horario de verano
+const VIAJES = {
+  finde: { ida: ["08:00", "10:30", "14:00", "15:30", "18:30"], vuelta: ["05:30", "11:00", "13:30", "17:00", "18:30"] },
+  semana: { ida: ["07:45", "10:30", "15:30", "18:30"], vuelta: ["05:30", "13:30", "17:00"] },
+};
+const MUELLE = { ida: 60, vuelta: 30 };
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const FIN_NINO = Date.UTC(2027, 4, 1) / 3.6e6; // supuesto: El Niño sigue hasta abril de 2027
+let D = null, estado = { dia: null, sel: 0 };
+
+function el(tag, attrs = {}, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// ---------- marea astronómica (misma base que empujar.base_marea) ----------
+function marea(hora) {
+  const h = hora - H2000, m = D.marea, N = 2 * Math.PI * h / m.nodal_h;
+  const cN = Math.cos(N), sN = Math.sin(N);
+  let i = 0, v = m.coef[i++];
+  for (const [p, nod] of m.periodos) {
+    const w = 2 * Math.PI * h / p, c = Math.cos(w), s = Math.sin(w);
+    v += m.coef[i++] * c + m.coef[i++] * s;
+    if (nod) { v += m.coef[i++] * c * cN + m.coef[i++] * c * sN + m.coef[i++] * s * cN + m.coef[i++] * s * sN; }
+  }
+  return v;
+}
+
+// ---------- luna ----------
+function luna(hora) {
+  const sin = 29.530588853 * 24, nueva = Date.UTC(2000, 0, 6, 18, 14) / 3.6e6;
+  const edad = (((hora - nueva) % sin) + sin) % sin / 24;
+  const ilum = (1 - Math.cos(2 * Math.PI * edad / 29.5306)) / 2;
+  let nombre = edad < 1.85 || edad > 27.7 ? "Luna nueva" : edad < 5.5 ? "Creciente" : edad < 9.2 ? "Cuarto creciente" : edad < 12.9 ? "Gibosa creciente"
+    : edad < 16.6 ? "Luna llena" : edad < 20.3 ? "Gibosa menguante" : edad < 24 ? "Cuarto menguante" : "Menguante";
+  const dSic = Math.min(edad, Math.abs(edad - 14.765), 29.53 - edad);
+  const marea = dSic < 2.5 ? "Mareas vivas: pleamares más altas, bajamares apenas más bajas." :
+    Math.abs(dSic - 7.38) < 2.5 ? "Mareas muertas: la marea sube y baja poco." : "Marea intermedia.";
+  return { edad, ilum, nombre, marea };
+}
+function dibujarLuna(l) {
+  const s = $("luna"); s.innerHTML = "";
+  el("circle", { r: 32, fill: css("--t1") }, s);
+  // parte iluminada: semicírculo + elipse del terminador
+  const k = Math.cos(2 * Math.PI * l.edad / 29.5306); // 1 nueva, -1 llena
+  const crece = l.edad < 14.765;
+  const rx = Math.abs(k) * 32;
+  const lado = crece ? 1 : 0;
+  const d = `M0,-32 A32,32 0 0,${lado} 0,32 A${rx},32 0 0,${(k > 0) === crece ? 0 : 1} 0,-32 Z`;
+  el("path", { d, fill: css("--t4") }, s);
+  el("circle", { r: 32, fill: "none", stroke: css("--t3"), "stroke-width": 1 }, s);
+}
+
+// ---------- utilidades de horas ----------
+const horaDe = (fecha, hhmm) => { // fecha "YYYY-MM-DD", hora local → hora UTC (horas desde 1970, fraccional)
+  const [y, mo, d] = fecha.split("-").map(Number), [hh, mm] = hhmm.split(":").map(Number);
+  return Date.UTC(y, mo - 1, d, hh + ART, mm) / 3.6e6;
+};
+function ventana(salida) { // como calendario.ventana_horas: horas enteras dentro de [salida+30, salida+60] min
+  const a = salida + 0.5, b = salida + 1;
+  let ini = Math.ceil(a - 1e-9), fin = Math.floor(b + 1e-9);
+  if (ini > b) ini = Math.floor(a);
+  if (fin < a) fin = Math.ceil(b);
+  const hs = []; for (let h = ini; h <= fin; h++) hs.push(h); return hs;
+}
+const serie = (s, h0, h) => { const i = h - h0; return i >= 0 && i < s.length ? s[i] : null; };
+const ahoraH = () => Date.now() / 3.6e6;
+
+// ---------- riesgo de un viaje ----------
+function evaluar(fecha, sentido, hhmm) {
+  const sal = horaDe(fecha, hhmm), hs = ventana(sal), U = D.umbral;
+  const ast = Math.min(...hs.map(marea));
+  const obs = hs.map(obsAt);
+  if (obs.every((v) => v != null) && hs[hs.length - 1] < ahoraH()) {
+    const m = Math.min(...obs);
+    return { fuente: "medido", nivel: m, p: m < U ? 1 : 0, ast, hs, sal };
+  }
+  const pr = D.prono, pn = hs.map((h) => serie(pr.nivel, pr.h0, h));
+  if (pn.every((v) => v != null) && hs[0] >= ahoraH() - 1) {
+    const i = hs.map((h) => h - pr.h0);
+    return { fuente: "pronóstico", nivel: Math.min(...pn), p: Math.max(...i.map((j) => pr.prob[j])),
+      sd: pr.sd[i[0]], viento: pr.viento_kmh[i[0]], dir: pr.viento_dir[i[0]], ast, hs, sal };
+  }
+  const R = D.riesgo, nino = hs[0] < FIN_NINO;
+  let b = R.bins.findIndex((x, k) => k > 0 && ast <= x) - 1; if (b < 0) b = R.bins.length - 2;
+  let base = R.tabla[String(U)][nino ? "nino" : "normal"][b];
+  if (base == null) base = R.tabla[String(U)].normal[b] ?? 0.1;
+  const dias = (hs[0] - ahoraH()) / 24;
+  let f = 1;
+  if (dias >= 0) { const k = R.bandas.findIndex(([a, z]) => dias >= a && dias < z); f = R.ajuste_rosario[String(U)][k < 0 ? R.bandas.length - 1 : k]; }
+  return { fuente: "estadística", nivel: null, p: Math.min(1, base * f), ast, nino, hs, sal };
+}
+function categoria(r) {
+  if (r.fuente === "medido") return r.p ? { n: 3, t: "No pasó" } : r.nivel < 0.5 ? { n: 2, t: "Pasó justo" } : { n: 0, t: "Pasó" };
+  return r.p < 0.07 ? { n: 0, t: "Pasa" } : r.p < 0.18 ? { n: 1, t: "Seguramente pasa" } : r.p < 0.4 ? { n: 2, t: "Dudoso" } : { n: 3, t: "Difícil" };
+}
+const pct = (p) => p < 0.01 ? "<1%" : Math.round(p * 100) + "%";
+const sumaMin = (hhmm, m) => { let [h, mi] = hhmm.split(":").map(Number); mi += m; h += Math.floor(mi / 60); mi %= 60; return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`; };
+const rumbo = (d) => ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"][Math.round(d / 22.5) % 16];
+
+// ---------- mapa ----------
+function dibujarMapa(r, nivel) {
+  const s = $("mapa"); s.innerHTML = "";
+  const t1 = css("--t1"), t2 = css("--t2"), t3 = css("--t3"), t4 = css("--t4"), ink = css("--ink"), ink2 = css("--ink2"), paper = css("--paper");
+  // agua: más nivel → tono más profundo
+  const x = Math.max(0, Math.min(1, (nivel - 0.1) / 1.6));
+  const agua = x > 0.66 ? t4 : x > 0.4 ? t3 : x > 0.2 ? t2 : t1;
+  const ancho = 3 + 9 * x;
+  el("rect", { width: 640, height: 440, fill: paper, rx: 14 }, s);
+  // Río de la Plata
+  el("path", { d: "M640,0 L640,440 L450,440 C470,400 490,360 520,300 C560,200 590,90 630,0 Z", fill: t3, opacity: 0.85 }, s);
+  // Paraná de las Palmas
+  el("path", { d: "M-10,70 C120,40 260,80 380,60 S540,92 600,112", fill: "none", stroke: t3, "stroke-width": 22, "stroke-linecap": "round" }, s);
+  // Río Luján (con Tigre)
+  el("path", { d: "M-10,395 C90,380 200,405 300,385 S430,320 540,300", fill: "none", stroke: agua, "stroke-width": 12 + ancho, "stroke-linecap": "round" }, s);
+  // Canal Arias
+  el("path", { d: "M175,392 C170,300 160,200 155,120 S154,70 156,52", fill: "none", stroke: agua, "stroke-width": 6 + ancho * 0.6, "stroke-linecap": "round" }, s);
+  // Arroyo Caraguatá
+  const car = "M262,392 C270,340 300,300 300,260 C300,220 330,206 318,178 C308,152 288,138 282,118 C268,96 200,90 156,96";
+  el("path", { d: car, fill: "none", stroke: agua, "stroke-width": 2 + ancho, "stroke-linecap": "round", id: "caraguata" }, s);
+  // bancos de barro si hay poca agua
+  if (nivel < 0.65) {
+    const n = nivel < 0.3 ? 5 : nivel < 0.45 ? 3 : 2;
+    [[313, 214], [284, 321], [318, 178], [222, 96], [300, 262]].slice(0, n).forEach(([cx, cy]) =>
+      el("ellipse", { cx, cy, rx: 9, ry: 4, fill: t2, stroke: ink2, "stroke-width": 0.8, "stroke-dasharray": "2 2" }, s));
+  }
+  // recorrido de la lancha
+  el("path", { d: "M416,342 C380,362 330,380 300,385 C285,388 270,392 262,392 " + car.slice(9), fill: "none", stroke: ink, "stroke-width": 1.2, "stroke-dasharray": "5 5", opacity: 0.55 }, s);
+  // etiquetas
+  const txt = (x0, y0, t, o = {}) => { const e = el("text", { x: x0, y: y0, fill: o.c || ink, "font-size": o.s || 13, "font-family": o.f || "Instrument Sans, sans-serif", "font-weight": o.w || 500, "text-anchor": o.a || "start", stroke: paper, "stroke-width": 3.5, "paint-order": "stroke", "stroke-linejoin": "round", ...o.extra }, s); e.textContent = t; return e; };
+  txt(24, 40, "Paraná de las Palmas", { w: 600 });
+  txt(628, 156, "Río de la Plata", { w: 600, a: "end" });
+  txt(628, 171, "se abre hacia el mar", { s: 11, a: "end" });
+  txt(24, 425, "Río Luján", { w: 600 });
+  txt(152, 300, "Canal Arias", { s: 11.5, c: ink2, extra: { transform: "rotate(-87 152 300)" } });
+  txt(334, 250, "Arroyo Caraguatá", { s: 13, w: 600 });
+  el("circle", { cx: 156, cy: 96, r: 7, fill: "none", stroke: ink2, "stroke-width": 1, "stroke-dasharray": "2 2" }, s);
+  // Tigre
+  el("circle", { cx: 416, cy: 342, r: 6, fill: ink }, s);
+  txt(416, 372, "Estación Fluvial Tigre", { s: 11.5, a: "middle" });
+  // entrada al arroyo y muelle
+  el("circle", { cx: 262, cy: 392, r: 4, fill: paper, stroke: ink, "stroke-width": 1.5 }, s);
+  txt(278, 370, "entra al arroyo", { s: 11.5 });
+  txt(170, 126, "desemboca en el Canal Arias", { s: 11.5 });
+  el("line", { x1: 300, y1: 146, x2: 318, y2: 146, stroke: ink, "stroke-width": 3, "stroke-linecap": "round" }, s);
+  [303, 309, 315].forEach((px) => el("line", { x1: px, y1: 146, x2: px, y2: 151, stroke: ink, "stroke-width": 1.2 }, s));
+  el("rect", { x: 320, y: 134, width: 17, height: 13, fill: t2, stroke: ink, "stroke-width": 1.4 }, s);
+  el("path", { d: "M317,135 L328.5,124 L340,135 Z", fill: ink }, s);
+  el("rect", { x: 326, y: 140, width: 5, height: 7, fill: ink }, s);
+  txt(346, 144, "tu casa", { s: 11.5, w: 600 });
+  // afluentes que empujan
+  const flecha = (x1, y1, x2, y2, t, sub, tx, ty, a = "start") => {
+    el("line", { x1, y1, x2, y2, stroke: ink2, "stroke-width": 1, "stroke-dasharray": "3 3", "marker-end": "url(#punta)" }, s);
+    txt(tx, ty, t, { s: 11.5, w: 600, c: ink2, a }); txt(tx, ty + 14, sub, { s: 11, c: ink2, f: "IBM Plex Mono, monospace", a });
+  };
+  const defs = el("defs", {}, s);
+  const mk = el("marker", { id: "punta", viewBox: "0 0 10 10", refX: 8, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M1,1 L9,5 L1,9", fill: "none", stroke: ink2, "stroke-width": 1.4 }, mk);
+  flecha(34, 112, 74, 74, "Paraná desde Rosario", `${fx(D.riesgo.rosario.valor)} m`, 18, 132);
+  flecha(632, 14, 624, 62, "Río Uruguay", `Concordia ${fx(D.concordia.valor)} m`, 614, 22, "end");
+  // viento sobre el Río de la Plata
+  if (r.viento != null && r.dir != null) {
+    const WX = 582, WY = 300;
+    el("circle", { cx: WX, cy: WY, r: 36, fill: paper, stroke: ink2, "stroke-width": 1 }, s);
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4, r1 = k % 2 ? 31 : 28; el("line", { x1: WX + r1 * Math.sin(a), y1: WY - r1 * Math.cos(a), x2: WX + 35 * Math.sin(a), y2: WY - 35 * Math.cos(a), stroke: ink2, "stroke-width": 1 }, s); }
+    txt(WX, WY - 40, "N", { s: 10, a: "middle", f: "IBM Plex Mono, monospace" });
+    const g = el("g", { transform: `translate(${WX},${WY}) rotate(${r.dir + 180})` }, s);
+    el("path", { d: "M0,-27 L7,0 L-7,0 Z", fill: ink }, g);
+    el("path", { d: "M0,27 L7,0 L-7,0 Z", fill: t2, stroke: ink2, "stroke-width": 0.8 }, g);
+    el("circle", { r: 2.5, fill: paper, stroke: ink, "stroke-width": 1 }, g);
+    txt(WX, WY + 54, `viento ${rumbo(r.dir)} · ${Math.round(r.viento)} km/h`, { s: 11.5, a: "middle", w: 600 });
+  }
+  // si no pasa: marca donde se trabaría
+  if (r && r.p >= 0.4) {
+    el("circle", { cx: 313, cy: 214, r: 11, fill: "none", stroke: ink, "stroke-width": 1.4, "stroke-dasharray": "3 3" }, s);
+    txt(330, 218, "poca agua para la lancha", { s: 11, c: ink2 });
+  }
+  // marea / nivel
+  txt(628, 408, `${nivel.toFixed(2)} m`, { a: "end", s: 26, w: 600, f: "Bricolage Grotesque, sans-serif" });
+  txt(628, 426, r.fuente === "medido" ? "medido en San Fernando" : r.fuente === "pronóstico" ? "pronosticado" : "marea astronómica", { a: "end", s: 11, c: ink2 });
+}
+
+// ---------- curva del día ----------
+function dibujarCurva(fecha, evals) {
+  const s = $("curva"); s.innerHTML = "";
+  const t1 = css("--t1"), t3 = css("--t3"), t4 = css("--t4"), ink = css("--ink"), ink2 = css("--ink2"), line = css("--line");
+  const W = 900, Hh = 260, L = 46, R = 14, T = 14, B = 34;
+  const h0 = horaDe(fecha, "04:00"), h1 = horaDe(fecha, "22:00");
+  const hs = []; for (let h = Math.floor(h0); h <= h1; h++) hs.push(h);
+  const ast = hs.map(marea);
+  const obs = hs.map((h) => h < ahoraH() ? obsAt(h) : null);
+  const pr = hs.map((h) => h >= ahoraH() - 1 ? serie(D.prono.nivel, D.prono.h0, h) : null);
+  const sd = hs.map((h) => serie(D.prono.sd, D.prono.h0, h));
+  const vals = [...ast, ...obs.filter((v) => v != null), ...pr.filter((v) => v != null).flatMap((v, i) => [v - 1.3 * 0.2, v + 1.3 * 0.2]), 0.2];
+  const ymin = Math.min(0, Math.floor(Math.min(...vals) * 5) / 5), ymax = Math.max(2, Math.ceil(Math.max(...vals) * 5) / 5);
+  const X = (h) => L + (h - h0) / (h1 - h0) * (W - L - R), Y = (v) => T + (ymax - v) / (ymax - ymin) * (Hh - T - B);
+  for (let v = ymin; v <= ymax + 1e-6; v += 0.5) {
+    el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: line, "stroke-width": 1 }, s);
+    const t = el("text", { x: L - 8, y: Y(v) + 4, "text-anchor": "end", "font-size": 11, fill: ink2, "font-family": "IBM Plex Mono, monospace" }, s); t.textContent = v.toFixed(1);
+  }
+  for (let k = 4; k <= 22; k += 3) {
+    const h = horaDe(fecha, `${String(k).padStart(2, "0")}:00`);
+    const t = el("text", { x: X(h), y: Hh - 10, "text-anchor": "middle", "font-size": 11, fill: ink2, "font-family": "IBM Plex Mono, monospace" }, s); t.textContent = `${k}h`;
+  }
+  // tramos de los viajes
+  evals.forEach((r, i) => {
+    const a = X(r.sal + 0.5), b = X(r.sal + 1);
+    el("rect", { x: a, y: T, width: Math.max(3, b - a), height: Hh - T - B, fill: i === estado.sel ? t3 : t1, opacity: i === estado.sel ? 0.55 : 0.7, rx: 2 }, s);
+  });
+  // banda del pronóstico (80%)
+  const ib = pr.map((v, i) => v != null ? i : -1).filter((i) => i >= 0);
+  if (ib.length) {
+    const up = ib.map((i) => `${X(hs[i])},${Y(pr[i] + 1.28 * (sd[i] || 0.2))}`), dn = ib.slice().reverse().map((i) => `${X(hs[i])},${Y(pr[i] - 1.28 * (sd[i] || 0.2))}`);
+    el("polygon", { points: up.concat(dn).join(" "), fill: t1, opacity: 0.9 }, s);
+  }
+  // umbral
+  el("line", { x1: L, x2: W - R, y1: Y(D.umbral), y2: Y(D.umbral), stroke: ink, "stroke-width": 1.2, "stroke-dasharray": "2 4" }, s);
+  const tu = el("text", { x: W - R - 4, y: Y(D.umbral) - 6, "text-anchor": "end", "font-size": 11.5, fill: ink }, s); tu.textContent = "0,40 m · por debajo la lancha sufre";
+  const linea = (arr, attrs) => {
+    let d = "", pen = false;
+    arr.forEach((v, i) => { if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${X(hs[i]).toFixed(1)},${Y(v).toFixed(1)} `; pen = true; });
+    if (d) el("path", { d, fill: "none", ...attrs }, s);
+  };
+  linea(ast, { stroke: t3, "stroke-width": 1.8, "stroke-dasharray": "6 5" });
+  linea(obs, { stroke: t4, "stroke-width": 2.6, "stroke-linejoin": "round" });
+  linea(pr, { stroke: t4, "stroke-width": 2.6, "stroke-linejoin": "round" });
+  const ley = [["ast", "marea astronómica"], ["", obs.some((v) => v != null) ? "medido" : "pronóstico ECMWF"], ["umb", "umbral de la lancha"]];
+  if (ib.length) ley.push(["banda", "rango probable (80%)"]);
+  $("leyenda").innerHTML = ley.filter(([c, t]) => c || obs.some((v) => v != null) || pr.some((v) => v != null)).map(([c, t]) => `<span class="${c}">${t}</span>`).join("");
+}
+
+// ---------- render ----------
+function hoyISO() { const d = new Date(Date.now() - ART * 3.6e6); return d.toISOString().slice(0, 10); }
+function sumarDias(f, n) { const d = new Date(f + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+function render() {
+  const f = estado.dia, d = new Date(f + "T12:00:00Z");
+  const fer = D.feriados.includes(f), finde = d.getUTCDay() === 0 || d.getUTCDay() === 6 || fer;
+  const sch = VIAJES[finde ? "finde" : "semana"];
+  const lista = [...sch.ida.map((h) => ["ida", h]), ...sch.vuelta.map((h) => ["vuelta", h])];
+  const evals = lista.map(([s, h]) => ({ ...evaluar(f, s, h), sentido: s, hora: h }));
+  if (estado.sel >= evals.length) estado.sel = 0;
+  const r = evals[estado.sel];
+
+  // veredicto del día: sobre las idas (el viaje que importa)
+  const idas = evals.filter((e) => e.sentido === "ida");
+  const mejor = idas.reduce((a, b) => (b.p < a.p ? b : a));
+  const cat = categoria(r);
+  $("veredicto").dataset.nivel = cat.n;
+  $("v-dia").textContent = `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]} de ${d.getUTCFullYear()}${fer ? " · feriado" : ""} · lancha de las ${r.hora} (${r.sentido})`;
+  $("v-grande").textContent = cat.t;
+  const pasoMuelle = sumaMin(r.hora, MUELLE[r.sentido]);
+  let txt;
+  if (r.fuente === "medido") txt = `El río marcó ${r.nivel.toFixed(2)} m en San Fernando cuando la lancha cruzaba el arroyo (pasa por tu muelle a las ${pasoMuelle}).`;
+  else if (r.fuente === "pronóstico") txt = `Riesgo de agua baja: ${pct(r.p)}. Nivel esperado ${r.nivel.toFixed(2)} m (±${(1.28 * r.sd).toFixed(2)}) al cruzar el arroyo; pasa por tu muelle a las ${pasoMuelle}.`;
+  else txt = `Riesgo de agua baja: ${pct(r.p)}, según lo que pasó en días con una marea parecida (${r.ast.toFixed(2)} m)${r.nino ? " y con El Niño" : ""}. Pasa por tu muelle a las ${pasoMuelle}.`;
+  if (r.fuente !== "medido" && mejor.p < r.p * 0.6 && mejor.hora !== r.hora) txt += ` La ida más segura del día es la de las ${mejor.hora} (${pct(mejor.p)}).`;
+  $("v-texto").textContent = txt;
+  const F = { "medido": ["Dato medido", "Prefectura / INA, San Fernando"], "pronóstico": ["Pronóstico del modelo", `con el viento ECMWF del ${new Date(D.emision + "Z").toLocaleDateString("es-AR", { day: "numeric", month: "short" })}`],
+    "estadística": ["Estimación de largo plazo", "marea astronómica + El Niño + Paraná. Faltan más de 7 días: el viento todavía no se puede pronosticar."] }[r.fuente];
+  $("v-fuente").innerHTML = `<b>${F[0]}</b>${F[1]}`;
+
+  // mapa
+  const nivelMapa = r.nivel != null ? r.nivel : r.ast;
+  $("m-titulo").textContent = `El arroyo a las ${sumaMin(r.hora, 45)} · lancha de las ${r.hora}`;
+  dibujarMapa(r, nivelMapa);
+
+  // luna y viento
+  const l = luna(r.sal);
+  dibujarLuna(l);
+  $("luna-nombre").textContent = l.nombre;
+  $("luna-sub").textContent = `${Math.round(l.ilum * 100)}% iluminada. ${l.marea}`;
+  const rosa = $("rosa"); rosa.innerHTML = "";
+  el("circle", { r: 32, fill: css("--t1") }, rosa);
+  ["N", "E", "S", "O"].forEach((t, i) => { const a = i * Math.PI / 2; const e = el("text", { x: 25 * Math.sin(a), y: -25 * Math.cos(a) + 3.5, "text-anchor": "middle", "font-size": 9, fill: css("--ink2"), "font-family": "IBM Plex Mono, monospace" }, rosa); e.textContent = t; });
+  if (r.viento != null && r.dir != null) {
+    const g = el("g", { transform: `rotate(${r.dir + 180})` }, rosa);
+    el("path", { d: "M0,-22 L6,0 L-6,0 Z", fill: css("--ink") }, g);
+    el("path", { d: "M0,22 L6,0 L-6,0 Z", fill: css("--t2") }, g);
+    $("viento-dato").textContent = `${rumbo(r.dir)} · ${Math.round(r.viento)} km/h`;
+    const dir = r.dir;
+    const efecto = (dir >= 290 || dir <= 30) ? "Del norte u oeste: empuja el agua hacia afuera y el río baja." : (dir >= 90 && dir <= 180) ? "Del sudeste: frena la salida del agua y el río sube." : "Efecto moderado sobre el nivel.";
+    $("viento-sub").textContent = efecto;
+  } else {
+    el("circle", { r: 3, fill: css("--t3") }, rosa);
+    $("viento-dato").textContent = r.fuente === "medido" ? "Ya pasó" : "Sin pronóstico";
+    $("viento-sub").textContent = r.fuente === "medido" ? "El nivel medido ya incluye lo que hizo el viento." : "El viento se puede pronosticar con unos 7 días de anticipación. Hasta entonces, cuentan la marea y el Paraná.";
+  }
+  const ro = D.riesgo.rosario;
+  $("rios").innerHTML = `
+    <div class="rio"><span>Paraná en Rosario</span><span class="mono">${fx(ro.valor)} m</span>
+      <span class="barra" aria-hidden="true"><i style="width:${Math.round(ro.percentil * 100)}%"></i></span>
+      <span class="sub" style="grid-column:1/-1">${Number.isFinite(ro.percentil) ? `Más alto que el ${Math.round(ro.percentil * 100)}% de los días registrados. ` : ""}Con el Paraná alto hay menos bajantes.</span></div>
+    <div class="rio"><span>Uruguay en Concordia</span><span class="mono">${fx(D.concordia.valor)} m</span></div>
+    <div class="rio"><span>El Niño (ONI)</span><span class="mono">${D.riesgo.oni.valor.toFixed(2)}</span>
+      <span class="sub" style="grid-column:1/-1">${D.riesgo.oni.valor > 0.5 ? "Niño en curso: los veranos con El Niño traen menos agua baja." : "Sin El Niño."}</span></div>`;
+
+  dibujarCurva(f, evals);
+
+  // viajes
+  const cont = $("viajes"); cont.innerHTML = "";
+  ["ida", "vuelta"].forEach((s) => {
+    const g = document.createElement("div"); g.className = "grupo";
+    g.innerHTML = `<h3>${s === "ida" ? "Ida · desde Tigre" : "Vuelta · hacia Tigre"}</h3>`;
+    const row = document.createElement("div"); row.className = "viajes";
+    evals.forEach((e, i) => {
+      if (e.sentido !== s) return;
+      const c = categoria(e), b = document.createElement("button");
+      b.className = "viaje"; b.setAttribute("aria-pressed", i === estado.sel);
+      const lleno = e.fuente === "medido" ? (e.p ? 12 : 85) : Math.round(100 - 88 * Math.min(1, e.p / 0.5));
+      b.innerHTML = `<span class="hora mono">${e.hora}</span><span class="que">por tu muelle ${sumaMin(e.hora, MUELLE[s])}</span>
+        <span class="agua" aria-hidden="true"><i style="height:${lleno}%"></i></span>
+        <span><b>${c.t}</b> <span class="pct">${e.fuente === "medido" ? e.nivel.toFixed(2) + " m" : pct(e.p)}</span></span>`;
+      b.onclick = () => { estado.sel = i; render(); };
+      row.appendChild(b);
+    });
+    g.appendChild(row); cont.appendChild(g);
+  });
+}
+
+function notas() {
+  const estadoVivo = D.vivo === "cargando" ? "Consultando el pronóstico de viento y los ríos…"
+    : D.vivo === "ok" ? `Pronóstico calculado en tu navegador el ${new Date(D.generado).toLocaleString("es-AR", { dateStyle: "medium", timeStyle: "short" })} con datos en vivo de Open-Meteo (ECMWF) y del INA.`
+    : `No pude bajar el pronóstico de viento (${D.vivo}). Para los próximos días muestro la estimación de largo plazo.`;
+  $("notas").innerHTML = `
+    <p><b>Cómo se calcula.</b> El nivel de referencia es el de San Fernando (INA / Prefectura), muy parecido a Canal Arias. Con menos de unos 40 cm la lancha va lenta o no entra al arroyo; el umbral sale de observaciones propias y es aproximado.</p>
+    <p><b>Días pasados:</b> nivel medido. <b>Próximos 7 días:</b> modelo propio (LightGBM) con el pronóstico de viento ECMWF en 10 puntos del Río de la Plata y la plataforma, la marea astronómica y los ríos; calibrado con dos años de pronósticos reales. Acierta bien a 1–3 días y pierde fuerza hacia los 7. <b>Más adelante:</b> frecuencia histórica 2011–2026 de agua baja con una marea parecida, ajustada por El Niño (se supone que dura hasta abril de 2027) y por el estado del Paraná.</p>
+    <p>${estadoVivo}</p>
+    <p><a href="https://github.com/mathigatti/altura-del-rio">Código y modelo en GitHub</a>.</p>`;
+}
+const fx = (v) => (Number.isFinite(v) ? v.toFixed(2) : "—");
+const OBS = new Map(), pedidos = new Set();
+const obsAt = (h) => (OBS.has(h) ? OBS.get(h) : null);
+const isoDia = (ms) => new Date(ms).toISOString().slice(0, 10);
+async function ina(serieId, desde, hasta) {
+  const r = await fetch(`https://alerta.ina.gob.ar/a5/obs/puntual/series/${serieId}/observaciones?timestart=${desde}&timeend=${hasta}&format=json`);
+  if (!r.ok) throw new Error(`INA ${r.status}`);
+  return (await r.json()).filter((o) => o.valor != null).map((o) => [o.timestart, o.valor]);
+}
+function cargarObs(lista) { // promedio por hora, sin valores imposibles (como modelo.cargar)
+  const acc = new Map();
+  for (const [t, v] of lista) { const h = Math.floor(Date.parse(t) / 3.6e6), a = acc.get(h) || [0, 0]; a[0] += v; a[1]++; acc.set(h, a); }
+  for (const [h, [s, n]] of acc) { const m = s / n; if (m >= -1.5 && m <= 5) OBS.set(h, m); }
+}
+async function asegurarObs(fecha) {
+  if (pedidos.has(fecha) || fecha > hoyISO()) return false;
+  pedidos.add(fecha);
+  try { cargarObs(await ina(52, sumarDias(fecha, -1), sumarDias(fecha, 2))); return true; } catch { pedidos.delete(fecha); return false; }
+}
+async function openMeteo(M) {
+  const ps = Object.keys(M.puntos);
+  const q = new URLSearchParams({ latitude: ps.map((p) => M.puntos[p][0]).join(","), longitude: ps.map((p) => M.puntos[p][1]).join(","),
+    hourly: "wind_speed_10m,wind_direction_10m,pressure_msl", models: "ecmwf_ifs025", past_days: "7", forecast_days: "8", wind_speed_unit: "ms", timezone: "GMT" });
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?${q}`);
+  if (!r.ok) throw new Error(`Open-Meteo ${r.status}`);
+  const j = await r.json(), out = {};
+  (Array.isArray(j) ? j : [j]).forEach((d, i) => {
+    out[ps[i]] = { h0: Date.parse(d.hourly.time[0] + ":00Z") / 3.6e6, vel: d.hourly.wind_speed_10m, dir: d.hourly.wind_direction_10m, pres: d.hourly.pressure_msl };
+  });
+  return out;
+}
+
+function irA(f) {
+  estado.dia = f; $("dia").value = f; render();
+  asegurarObs(f).then((nuevo) => { if (nuevo && estado.dia === f) render(); });
+}
+$("menos").onclick = () => irA(sumarDias(estado.dia, -1));
+$("mas").onclick = () => irA(sumarDias(estado.dia, 1));
+$("dia").onchange = (e) => { if (e.target.value) irA(e.target.value); };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => estado.dia && render());
+new MutationObserver(() => estado.dia && render()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+async function iniciar() {
+  const M = await (await fetch("model.json")).json();
+  const ahora = Math.floor(Date.now() / 3.6e6);
+  D = { marea: M.marea_display, umbral: M.umbral, feriados: M.feriados, generado: new Date().toISOString(),
+    emision: new Date(ahora * 3.6e6).toISOString().slice(0, 16), vivo: "cargando",
+    prono: { h0: 0, nivel: [], prob: [], sd: [], viento_kmh: [], viento_dir: [] },
+    riesgo: { ...M.riesgo, ajuste_rosario: M.riesgo.ajuste_rosario.normal, rosario: { valor: NaN, percentil: NaN } },
+    concordia: { valor: NaN } };
+  notas();
+  let f = hoyISO(); while (new Date(f + "T12:00:00Z").getUTCDay() !== 6) f = sumarDias(f, 1);
+  irA(f);
+
+  const desde = isoDia(Date.now() - 60 * 864e5), hasta = isoDia(Date.now() + 864e5);
+  const [om, ros, con, sf] = await Promise.allSettled([openMeteo(M), ina(34, desde, hasta), ina(79, desde, hasta), ina(52, isoDia(Date.now() - 10 * 864e5), hasta)]);
+  if (sf.status === "fulfilled") cargarObs(sf.value);
+  const R = M.riesgo;
+  if (ros.status === "fulfilled" && ros.value.length) {
+    const v = ros.value[ros.value.length - 1][1];
+    const est = v > R.ros_alto ? "alto" : v < R.ros_bajo ? "bajo" : "normal";
+    D.riesgo.ajuste_rosario = R.ajuste_rosario[est];
+    D.riesgo.rosario = { valor: v, estado: est, percentil: R.ros_hist.filter((q) => q < v).length / R.ros_hist.length };
+  }
+  if (con.status === "fulfilled" && con.value.length) D.concordia = { valor: con.value[con.value.length - 1][1] };
+  if (om.status === "fulfilled") {
+    const fc = om.value;
+    const Dm = Modelo.preparar({ forecast: fc, rosario: ros.status === "fulfilled" ? ros.value : [], concordia: con.status === "fulfilled" ? con.value : [] });
+    const fin = Math.min(...Object.values(fc).map((x) => x.h0 + x.vel.length - 1));
+    const horas = []; for (let h = ahora - 24; h <= fin; h++) horas.push(h);
+    const pr = Modelo.predecir(M, Dm, horas, ahora), w = fc.rdp_medio;
+    D.prono = { h0: horas[0], nivel: pr.map((p) => p.nivel), prob: pr.map((p) => p.prob), sd: pr.map((p) => p.sd),
+      viento_kmh: horas.map((h) => w.vel[h - w.h0] * 3.6), viento_dir: horas.map((h) => w.dir[h - w.h0]) };
+    D.vivo = "ok";
+  } else D.vivo = String(om.reason && om.reason.message || om.reason);
+  notas(); render();
+}
+iniciar().catch((e) => { $("v-grande").textContent = "No pude cargar el modelo"; $("v-texto").textContent = String(e); });
+</script>
+</body>
+</html>
