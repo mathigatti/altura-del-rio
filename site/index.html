@@ -327,7 +327,7 @@ function dibujarMapa(r, nivel) {
   txt(416, 372, "Estación Fluvial Tigre", { s: 11.5, a: "middle" });
   // entrada al arroyo y muelle
   el("circle", { cx: 262, cy: 392, r: 4, fill: paper, stroke: ink, "stroke-width": 1.5 }, s);
-  txt(278, 370, "entra al arroyo", { s: 11.5 });
+  txt(250, 374, "entra al arroyo", { s: 11.5, a: "end" });
   txt(170, 126, "desemboca en el Canal Arias", { s: 11.5 });
   el("line", { x1: 300, y1: 146, x2: 318, y2: 146, stroke: ink, "stroke-width": 3, "stroke-linecap": "round" }, s);
   [303, 309, 315].forEach((px) => el("line", { x1: px, y1: 146, x2: px, y2: 151, stroke: ink, "stroke-width": 1.2 }, s));
