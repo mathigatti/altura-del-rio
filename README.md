@@ -1,5 +1,7 @@
 # ¿Pasa la lancha por el Caraguatá?
 
+**Sitio:** https://pasa-la-lancha.netlify.app (se despliega solo con cada push a `main`).
+
 Elegís una fecha y la página te dice si la lancha colectiva **Ramal 3** (Tigre → Paraná de las Palmas) va a poder entrar al **arroyo Caraguatá**, en el Delta del Paraná. Con el río bajo, la lancha va lenta o no pasa.
 
 Todo corre en el navegador, con datos en vivo:
